@@ -8,9 +8,9 @@ library(parallel)
 library(doSNOW)   # use doSNOW to allow parallel loops with progress bars
 library(CellChat)
 library(AUCell)
-source("DownstreamCCI_pipeline.R")
-source("DownstreamCCI_class.R")
-source("DownstreamCCI_visualizations.R")
+source("/home/projects2/kam_project/downstreamcci/DownstreamCCI_pipeline.R")
+source("/home/projects2/kam_project/downstreamcci/DownstreamCCI_class.R")
+source("/home/projects2/kam_project/downstreamcci/DownstreamCCI_visualizations.R")
 
 # Main function that calls the helper functions
 runDownstreamCCI <- function(seurat_obj = NULL,
