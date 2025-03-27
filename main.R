@@ -57,16 +57,16 @@ dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), inte
 dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.05, collection="C2", pathway_col="receptor", numCores = 1)
 
 # save the file
-saveRDS(dcc, file = "/home/projects2/kam_project/outputs/dcc_full_sample.rds")
+saveRDS(dcc, file = "/home/projects2/kam_project/downstreamcci/outputs/dcc_full_sample.rds")
 
 # enrichment vs distance
-printInteractionNumbers(dcc)
-plotEnrichmentVsDistance(dcc, "CD99_CD99", enrichment_metric = "ratio")
+#printInteractionNumbers(dcc)
+#plotEnrichmentVsDistance(dcc, "CD99_CD99", enrichment_metric = "ratio")
 
 # Visualize the network using the final interactions stored in the object.
-plotCellChatNetwork(
-  dcc=dcc,
-  title.name = "Cell-Cell Communication Network",
-  arrow.width = 2,
-  arrow.size = 0.6)
+#plotCellChatNetwork(
+#  dcc=dcc,
+#  title.name = "Cell-Cell Communication Network",
+#  arrow.width = 2,
+#  arrow.size = 0.6)
 
