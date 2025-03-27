@@ -1,4 +1,4 @@
-setwd("~/#DTU/KU/nichenet")
+#setwd("~/#DTU/KU/nichenet")
 source("KNN_imputation.R")
 source("DownstreamCCI.R")
 source("DownstreamCCI_utils.R")
