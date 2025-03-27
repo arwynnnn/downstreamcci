@@ -1,7 +1,7 @@
-setwd("/home/projects2/downstreamcci")
-source("KNN_imputation.R")
-source("DownstreamCCI.R")
-source("DownstreamCCI_utils.R")
+#setwd("/home/projects2/downstreamcci")
+source("/home/projects2/downstreamcci/KNN_imputation.R")
+source("/home/projects2/downstreamcci/DownstreamCCI.R")
+source("/home/projects2/downstreamcci/DownstreamCCI_utils.R")
 library(Seurat)
 library(SeuratObject)
 
