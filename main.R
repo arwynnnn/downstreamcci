@@ -57,7 +57,7 @@ dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), inte
 dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.05, collection="C2", pathway_col="receptor", numCores = -1)
 
 # save the file
-saveRDS(dcc, file = "/home/projects2/kam_project/downstreamcci/outputs/dcc_full_sample.rds")
+saveRDS(dcc, file = "/home/projects2/kam_project/outputs/dcc_test.rds")
 
 # enrichment vs distance
 #printInteractionNumbers(dcc)
