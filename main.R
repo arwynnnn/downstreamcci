@@ -26,10 +26,10 @@ rownames(HumanTonsil_spatial) <- HumanTonsil_spatial$NAME
 seurat_obj <- AddMetaData(seurat_obj, metadata = HumanTonsil_spatial)
 
 #view the sample and filter based on cell types
-visualize_spatial_celltypes(seurat_obj, pt.size=2.5, celltypes=c("B_germinal_center", "B_naive"))
-#seurat_obj_min <- subset_seurat(seurat_obj, xmin=750, xmax=1500, ymin=1100, ymax=2250, celltypes=c("B_germinal_center", "B_naive"))
-seurat_obj_min <- subset_seurat(seurat_obj, xmin=750, xmax=1000, ymin=1000, ymax=1250)
-visualize_spatial_celltypes(seurat_obj_min, pt.size=2.5)
+#visualize_spatial_celltypes(seurat_obj, pt.size=2.5, celltypes=c("B_germinal_center", "B_naive"))
+seurat_obj_min <- subset_seurat(seurat_obj, xmin=750, xmax=1500, ymin=1100, ymax=2250, celltypes=c("B_germinal_center", "B_naive"))
+#seurat_obj_min <- subset_seurat(seurat_obj, xmin=750, xmax=1000, ymin=1000, ymax=1250)
+#visualize_spatial_celltypes(seurat_obj_min, pt.size=2.5)
 
 # data normalisation and imputation
 seurat_obj_min <- SCTransform(seurat_obj_min)
@@ -54,7 +54,7 @@ dcc$computeSourceTargetPass(
 dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), interaction_distance = 5, numCores = -1)
 
 # Step 3: Calculate AUCell Scores, Filter Interactions
-dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.05, collection="C2", pathway_col="receptor", numCores = 1)
+dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.05, collection="C2", pathway_col="receptor", numCores = -1)
 
 # save the file
 saveRDS(dcc, file = "/home/projects2/kam_project/downstreamcci/outputs/dcc_full_sample.rds")
