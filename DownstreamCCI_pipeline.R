@@ -273,7 +273,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   interactions_df <- interactions_df %>% mutate(pathway_value = .data[[pathway_col]])
   unique_pathways <- unique(interactions_df$pathway_value)
   
-  msigdb_df <- msigdbr(species = "Homo sapiens", category = collection)
+  msigdb_df <- msigdbr(species = "Homo sapiens", collection = collection)
   message("  Building gene set mapping using ", collection, " category...")
   
   gene_set_mapping <- list()
