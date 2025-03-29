@@ -47,14 +47,14 @@ dcc$computeSourceTargetPass(
   assay = "nnbulk",
   cell_type_col = "cell_type",
   cci_network_all = cci_network_all,
-  high_exp_threshold = 0.8,
+  high_exp_threshold = 0.25,
   numCores = -1)
 
 # Step 2: Compute Spatial Neighbours and Annotate Interactions.
-dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), interaction_distance = 5, numCores = -1)
+dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), interaction_distance = 100, numCores = -1)
 
 # Step 3: Calculate AUCell Scores, Filter Interactions
-dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.05, collection="C2", pathway_col="receptor", numCores = -1)
+dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.25, collection="C2", pathway_col="receptor", numCores = -1)
 
 # save the file
 saveRDS(dcc, file = "/home/projects2/kam_project/outputs/dcc_test.rds")
