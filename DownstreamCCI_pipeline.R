@@ -357,7 +357,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   interaction_results <- interactions_df %>% rowwise() %>% mutate(
     candidate_gene_sets = list(pathway_candidates[[pathway_value]]),
     candidate_info_df = list({
-      cell <- .data$target_cell
+      cell <- target_cell
       candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
         auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
           auc_matrix[cand, cell]
@@ -382,7 +382,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
       nCandidates = sapply(candidate_info_df, nrow),
       enriched_percentage = sapply(candidate_info_df, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
       median_ratio = sapply(candidate_info_df, function(df) median(df$ratio, na.rm = TRUE)),
-      composite_score = median_ratio / (.data$distance + 1e-06)
+      composite_score = median_ratio / (distance + 1e-06)
     )
   
   # --- Filter and rank interactions ---
