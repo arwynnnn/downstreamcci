@@ -356,33 +356,59 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   
   interaction_results <- interactions_df %>% rowwise() %>% mutate(
     candidate_gene_sets = list(pathway_candidates[[pathway_value]]),
-    candidate_info_df = list({
-      cell <- target_cell
-      candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
-        auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-          auc_matrix[cand, cell]
-        } else { 
-          0 
-        }
-        thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
-          thr_results[[cand]]$aucThr$selected
-        } else { 
-          1 
-        }
-        ratio_val <- auc_val / thr_val
-        data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
-      })
-      df <- do.call(rbind, candidate_vals_list)
-      rownames(df) <- NULL
-      df
+  candidate_info_df_target = list({
+    cell <- target_cell
+    candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
+      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+        auc_matrix[cand, cell]
+      } else { 
+        0 
+      }
+      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
+        thr_results[[cand]]$aucThr$selected
+      } else { 
+        1 
+      }
+      ratio_val <- auc_val / thr_val
+      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
     })
+    df <- do.call(rbind, candidate_vals_list)
+    rownames(df) <- NULL
+    df
+  }),
+  candidate_info_df_source = list({
+    cell <- source_cell
+    candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
+      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+        auc_matrix[cand, cell]
+      } else { 
+        0 
+      }
+      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
+        thr_results[[cand]]$aucThr$selected
+      } else { 
+        1 
+      }
+      ratio_val <- auc_val / thr_val
+      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
+    })
+    df <- do.call(rbind, candidate_vals_list)
+    rownames(df) <- NULL
+    df
+  })
   ) %>% 
     ungroup() %>% 
     mutate(
-      nCandidates = sapply(candidate_info_df, nrow),
-      enriched_percentage = sapply(candidate_info_df, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
-      median_ratio = sapply(candidate_info_df, function(df) median(df$ratio, na.rm = TRUE)),
-      composite_score = median_ratio / (distance + 1e-06)
+      nCandidates_target = sapply(candidate_info_df_target, nrow),
+      enriched_percentage_target = sapply(candidate_info_df_target, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
+      median_ratio_target = sapply(candidate_info_df_target, function(df) median(df$ratio, na.rm = TRUE)),
+      
+      nCandidates_source = sapply(candidate_info_df_source, nrow),
+      enriched_percentage_source = sapply(candidate_info_df_source, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
+      median_ratio_source = sapply(candidate_info_df_source, function(df) median(df$ratio, na.rm = TRUE)),
+      
+      # Combine the two enrichment scores (e.g., as an average)
+      composite_score = (median_ratio_target + median_ratio_source) / (2 * (distance + 1e-06))
     )
   
   # --- Filter and rank interactions ---
