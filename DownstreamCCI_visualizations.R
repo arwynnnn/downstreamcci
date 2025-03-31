@@ -8,13 +8,13 @@ plotCellChatNetwork <- function(dcc, ...) {
   }
   
   # Extract and clean the final interactions data frame.
-  ranked_interactions <- dcc$final_interactions[complete.cases(dcc$final_interactions), ]
+  ranked_interactions <- dcc$full_interactions[complete.cases(dcc$full_interactions), ]
   
   # Aggregate scores by source and target cell types.
   celltype_summary <- ranked_interactions %>%
     dplyr::group_by(source_cell_type, target_cell_type) %>%
     dplyr::summarise(
-      mean_score = mean(score, na.rm = TRUE),
+      mean_score = mean(medan_ratio, na.rm = TRUE),
       n_interactions = dplyr::n(),
       .groups = "drop"
     )
