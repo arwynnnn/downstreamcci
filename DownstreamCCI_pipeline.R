@@ -321,7 +321,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   names(pathway_candidates) <- unique_pathways
   
   # --- Use ALL cells for AUCell ranking (global context) ---
-  expr_dense_full <- as.matrix(seurat_obj[[assay]]@data)
+  expr_dense_full <- as.matrix(seu\rat_obj[[assay]]@data)
   expr_dense <- expr_dense_full  # Using all cells ensures more robust rankings
   
   message("  Building AUCell rankings for assay '", assay, "'...")
@@ -346,7 +346,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   message("  Computing thresholds for enrichment scores...")
   pb <- txtProgressBar(min = 0, max = 100, style = 3)
   setTxtProgressBar(pb, 0)
-  thr_results <- suppressWarnings(suppressMessages(AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = 1, verbose = TRUE)))
+  thr_results <- suppressWarnings(suppressMessages(AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)))
   setTxtProgressBar(pb, 100)
   close(pb)
   auc_matrix <- getAUC(cells_AUC)
@@ -412,8 +412,8 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
     )
   
   # --- Filter and rank interactions ---
-  ranked_interactions <- interaction_results %>% 
-    filter(median_ratio > 1) %>% 
+  ranked_interactions <- interaction_results %>%
+    filter(median_ratio_target > 1, median_ratio_source > 1) %>% 
     arrange(desc(composite_score))
   
   # Remove columns not needed by the final user
