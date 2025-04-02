@@ -321,7 +321,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   names(pathway_candidates) <- unique_pathways
   
   # --- Use ALL cells for AUCell ranking (global context) ---
-  expr_dense_full <- as.matrix(seu\rat_obj[[assay]]@data)
+  expr_dense_full <- as.matrix(seurat_obj[[assay]]@data)
   expr_dense <- expr_dense_full  # Using all cells ensures more robust rankings
   
   message("  Building AUCell rankings for assay '", assay, "'...")
