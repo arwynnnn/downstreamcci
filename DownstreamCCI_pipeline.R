@@ -263,24 +263,24 @@ computeNeighboursAndAnnotateInteractions <- function(seurat_obj, coordinate_cols
 ###############################
 calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collection, assay, aucMaxRank_top_genes, numCores, pathway_col) {
   message("Step 3: Calculating enrichment and computing final scores...")
-  
+
   library(msigdbr)
   library(dplyr)
   library(stringr)
   library(AUCell)
-  
+
   # Use the user-specified column for pathway names
   interactions_df <- interactions_df %>% mutate(pathway_value = .data[[pathway_col]])
   unique_pathways <- unique(interactions_df$pathway_value)
-  
-  msigdb_df <- msigdbr(species = "Homo sapiens", collection = collection, subcollection="GO:BP")
-  message("  Building gene set mapping using ", collection, " category...")
-  
-  gene_set_mapping <- list()
+
+  msigdb_df <- msigdbr(species = "Homo sapiens", collection = collection, subcollection = "GO:BP")
+  message("  Building consolidated gene set mapping for each pathway using the ", collection, " category...")
+
+  # Build a consolidated mapping: for each pathway, take the union of all matching genes.
+  pathway_gene_mapping <- list()
   pb <- txtProgressBar(min = 0, max = length(unique_pathways), style = 3)
   for (i in seq_along(unique_pathways)) {
     pw <- unique_pathways[i]
-    # Special handling: if pathway is "MHC-I" or "MHC-II", search using "HLA"
     if (toupper(pw) %in% c("MHC-I", "MHC-II")) {
       search_pw <- "HLA"
     } else if (grepl("-", pw)) {
@@ -288,38 +288,22 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
     } else {
       search_pw <- pw
     }
-    
     msig_subset <- msigdb_df %>% 
       filter(str_detect(tolower(gene_symbol), fixed(tolower(search_pw))))
-    
     if (nrow(msig_subset) > 0) {
-      unique_gene_sets <- unique(msig_subset$gs_name)
-      for (gs in unique_gene_sets) {
-        gs_name_full <- paste0(pw, "__", gs)
-        full_gene_list <- msigdb_df %>% 
-          filter(gs_name == gs) %>% 
-          pull(gene_symbol) %>% 
-          unique()
-        gene_set_mapping[[gs_name_full]] <- full_gene_list
-      }
+      # Consolidate by taking the union of all genes found for this pathway
+      all_genes <- unique(msig_subset$gene_symbol)
+      pathway_gene_mapping[[pw]] <- all_genes
+    } else {
+      pathway_gene_mapping[[pw]] <- character(0)
     }
     setTxtProgressBar(pb, i)
   }
   close(pb)
-  
-  # --- Precompute candidate gene sets for each pathway ---
-  pathway_candidates <- lapply(unique_pathways, function(pw) {
-    candidates <- names(gene_set_mapping)[
-      str_detect(tolower(names(gene_set_mapping)), paste0("^", tolower(pw), "__"))
-    ]
-    if (length(candidates) == 0) {
-      # Fallback candidate if no match found
-      candidates <- paste0(pw, "__", pw)
-    }
-    candidates
-  })
-  names(pathway_candidates) <- unique_pathways
-  
+
+  # For each pathway, we now use a single candidate (the pathway name) that maps to the consolidated gene set.
+  candidate_mapping <- pathway_gene_mapping
+
   # --- Use ALL cells for AUCell ranking (global context) ---
   expr_dense_full <- as.matrix(seurat_obj[[assay]]@data)
   expr_dense <- expr_dense_full  # Using all cells ensures more robust rankings
@@ -338,27 +322,52 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   }
   pb <- txtProgressBar(min = 0, max = 100, style = 3)
   setTxtProgressBar(pb, 0)
-  cells_AUC <- suppressWarnings(suppressMessages(AUCell_calcAUC(gene_set_mapping, cells_rankings, 
+  cells_AUC <- suppressWarnings(suppressMessages(AUCell_calcAUC(candidate_mapping, cells_rankings, 
                                                                 aucMaxRank = aucMaxRank_value, nCores = numCores, verbose = TRUE)))
   setTxtProgressBar(pb, 100)
   close(pb)
   
+  # Checkpoint: Save cells_AUC so you can resume later if needed.
+  checkpoint_file <- "/home/projects2/kam_project/downstreamcci/outputs/cells_AUC_checkpoint.rds"
+  saveRDS(cells_AUC, file = checkpoint_file)
+  message("Checkpoint saved: ", checkpoint_file)
+  
   message("  Computing thresholds for enrichment scores...")
   pb <- txtProgressBar(min = 0, max = 100, style = 3)
   setTxtProgressBar(pb, 0)
-  thr_results <- suppressWarnings(suppressMessages(AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)))
+  thr_results <- AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)
   setTxtProgressBar(pb, 100)
   close(pb)
   auc_matrix <- getAUC(cells_AUC)
   
   # --- Compute composite scores for each interaction ---
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
+
+  checkpoint_file <- "/home/projects2/kam_project/downstreamcci/outputs/interactions_df_checkpoint.rds"
+  saveRDS(interactions_df, file = checkpoint_file)
+  message("Checkpoint saved: ", checkpoint_file)
   
   interaction_results <- interactions_df %>% rowwise() %>% mutate(
-    candidate_gene_sets = list(pathway_candidates[[pathway_value]]),
-  candidate_info_df_target = list({
-    cell <- target_cell
-    candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
+    # For each interaction, we now simply use the pathway name as the candidate key.
+    candidate_info_df_target = list({
+      cell <- target_cell
+      cand <- pathway_value
+      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+        auc_matrix[cand, cell]
+      } else { 
+        0 
+      }
+      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
+        thr_results[[cand]]$aucThr$selected
+      } else { 
+        1 
+      }
+      ratio_val <- auc_val / thr_val
+      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
+    }),
+    candidate_info_df_source = list({
+      cell <- source_cell
+      cand <- pathway_value
       auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
         auc_matrix[cand, cell]
       } else { 
@@ -372,55 +381,28 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
       ratio_val <- auc_val / thr_val
       data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
     })
-    df <- do.call(rbind, candidate_vals_list)
-    rownames(df) <- NULL
-    df
-  }),
-  candidate_info_df_source = list({
-    cell <- source_cell
-    candidate_vals_list <- lapply(candidate_gene_sets, function(cand) {
-      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-        auc_matrix[cand, cell]
-      } else { 
-        0 
-      }
-      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
-        thr_results[[cand]]$aucThr$selected
-      } else { 
-        1 
-      }
-      ratio_val <- auc_val / thr_val
-      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
-    })
-    df <- do.call(rbind, candidate_vals_list)
-    rownames(df) <- NULL
-    df
-  })
   ) %>% 
     ungroup() %>% 
     mutate(
-      nCandidates_target = sapply(candidate_info_df_target, nrow),
       enriched_percentage_target = sapply(candidate_info_df_target, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
       median_ratio_target = sapply(candidate_info_df_target, function(df) median(df$ratio, na.rm = TRUE)),
-      
-      nCandidates_source = sapply(candidate_info_df_source, nrow),
       enriched_percentage_source = sapply(candidate_info_df_source, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
       median_ratio_source = sapply(candidate_info_df_source, function(df) median(df$ratio, na.rm = TRUE)),
       
-      # Combine the two enrichment scores (e.g., as an average)
+      # Combine the two enrichment scores (e.g., as an average) normalized by distance
       composite_score = (median_ratio_target + median_ratio_source) / (2 * (distance + 1e-06))
     )
   
   # --- Filter and rank interactions ---
-  ranked_interactions <- interaction_results %>%
+  ranked_interactions <- interaction_results %>% 
     filter(median_ratio_target > 1, median_ratio_source > 1) %>% 
     arrange(desc(composite_score))
   
   # Remove columns not needed by the final user
   final_interactions <- ranked_interactions %>% 
-    select(-interaction_id, -candidate_gene_sets, -pathway_value)
+    select(-interaction_id)
   interaction_results <- interaction_results %>% 
-    select(-interaction_id, -candidate_gene_sets, -pathway_value)
+    select(-interaction_id)
   
   return(list(final_interactions = final_interactions,
               full_interactions = interaction_results,
