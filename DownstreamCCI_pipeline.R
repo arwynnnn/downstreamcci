@@ -279,7 +279,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   # Build candidate mapping: each GO term (gs_name) maps to its unique gene set.
   candidate_mapping <- msigdb_df %>%
     group_by(gs_name) %>%
-    summarize(genes = unique(gene_symbol)) %>%
+    reframe(genes = list(unique(gene_symbol))) %>%
     ungroup() %>%
     { setNames(.$genes, .$gs_name) }
   
