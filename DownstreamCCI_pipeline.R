@@ -341,68 +341,50 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   auc_matrix <- getAUC(cells_AUC)
   
   # --- Compute composite scores for each interaction ---
-  interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
+ # Add interaction_id temporarily to join with AUC data
+interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
 
-  checkpoint_file <- "/home/projects2/kam_project/downstreamcci/outputs/interactions_df_checkpoint.rds"
-  saveRDS(interactions_df, file = checkpoint_file)
-  message("Checkpoint saved: ", checkpoint_file)
-  
-  interaction_results <- interactions_df %>% rowwise() %>% mutate(
-    # For each interaction, we now simply use the pathway name as the candidate key.
-    candidate_info_df_target = list({
-      cell <- target_cell
-      cand <- pathway_value
-      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-        auc_matrix[cand, cell]
-      } else { 
-        0 
-      }
-      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
-        thr_results[[cand]]$aucThr$selected
-      } else { 
-        1 
-      }
-      ratio_val <- auc_val / thr_val
-      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
-    }),
-    candidate_info_df_source = list({
-      cell <- source_cell
-      cand <- pathway_value
-      auc_val <- if (cand %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-        auc_matrix[cand, cell]
-      } else { 
-        0 
-      }
-      thr_val <- if (!is.null(thr_results[[cand]]) && !is.null(thr_results[[cand]]$aucThr$selected)) {
-        thr_results[[cand]]$aucThr$selected
-      } else { 
-        1 
-      }
-      ratio_val <- auc_val / thr_val
-      data.frame(candidate = cand, AUC = auc_val, threshold = thr_val, ratio = ratio_val, stringsAsFactors = FALSE)
-    })
-  ) %>% 
-    ungroup() %>% 
-    mutate(
-      enriched_percentage_target = sapply(candidate_info_df_target, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
-      median_ratio_target = sapply(candidate_info_df_target, function(df) median(df$ratio, na.rm = TRUE)),
-      enriched_percentage_source = sapply(candidate_info_df_source, function(df) if(nrow(df) > 0) mean(df$ratio > 1) * 100 else NA),
-      median_ratio_source = sapply(candidate_info_df_source, function(df) median(df$ratio, na.rm = TRUE)),
-      
-      # Combine the two enrichment scores (e.g., as an average) normalized by distance
-      composite_score = (median_ratio_target + median_ratio_source) / (2 * (distance + 1e-06))
-    )
-  
-  # --- Filter and rank interactions ---
-  ranked_interactions <- interaction_results %>% 
-    filter(median_ratio_target > 1, median_ratio_source > 1) %>% 
-    arrange(desc(composite_score))
-  
-  # Remove columns not needed by the final user
-  final_interactions <- ranked_interactions %>% 
-    select(-interaction_id)
-  interaction_results <- interaction_results %>% 
-    select(-interaction_id)
+# Extract AUC values and thresholds for source and target cells
+interactions_df$auc_target <- mapply(function(pathway, cell) {
+  if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+    auc_matrix[pathway, cell]
+  } else {
+    0
+  }
+}, interactions_df[[pathway_col]], interactions_df$target_cell)
+
+interactions_df$auc_source <- mapply(function(pathway, cell) {
+  if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+    auc_matrix[pathway, cell]
+  } else {
+    0
+  }
+}, interactions_df[[pathway_col]], interactions_df$source_cell)
+
+interactions_df$thr_target <- sapply(interactions_df[[pathway_col]], function(pw) {
+  if (!is.null(thr_results[[pw]]) && !is.null(thr_results[[pw]]$aucThr$selected)) {
+    thr_results[[pw]]$aucThr$selected
+  } else {
+    1
+  }
+})
+
+interactions_df$thr_source <- interactions_df$thr_target  # same logic for both, if pathway name is same
+
+# Compute ratios
+interactions_df$ratio_target <- interactions_df$auc_target / interactions_df$thr_target
+interactions_df$ratio_source <- interactions_df$auc_source / interactions_df$thr_source
+
+# Composite score normalized by distance
+interactions_df$composite_score <- (interactions_df$ratio_target + interactions_df$ratio_source) / (2 * (interactions_df$distance + 1e-06))
+
+# Filter and sort
+ranked_interactions <- interactions_df %>%
+  filter(ratio_target > 1, ratio_source > 1) %>%
+  arrange(desc(composite_score))
+
+final_interactions <- ranked_interactions %>% select(-interaction_id)
+interaction_results <- interactions_df %>% select(-interaction_id)
   
   return(list(final_interactions = final_interactions,
               full_interactions = interaction_results,
