@@ -341,8 +341,10 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   auc_matrix <- getAUC(cells_AUC)
   
   # --- Compute composite scores for each interaction ---
-  interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
+ # Add interaction_id temporarily to join with AUC data
+interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
 
+<<<<<<< HEAD
   checkpoint_file <- "/home/projects2/kam_project/outputs/interactions_df_checkpoint_r3.rds"
   saveRDS(interactions_df, file = checkpoint_file)
   message("Checkpoint saved: ", checkpoint_file)
@@ -403,6 +405,49 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
     select(-interaction_id)
   interaction_results <- interaction_results %>% 
     select(-interaction_id)
+=======
+# Extract AUC values and thresholds for source and target cells
+interactions_df$auc_target <- mapply(function(pathway, cell) {
+  if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+    auc_matrix[pathway, cell]
+  } else {
+    0
+  }
+}, interactions_df[[pathway_col]], interactions_df$target_cell)
+
+interactions_df$auc_source <- mapply(function(pathway, cell) {
+  if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
+    auc_matrix[pathway, cell]
+  } else {
+    0
+  }
+}, interactions_df[[pathway_col]], interactions_df$source_cell)
+
+interactions_df$thr_target <- sapply(interactions_df[[pathway_col]], function(pw) {
+  if (!is.null(thr_results[[pw]]) && !is.null(thr_results[[pw]]$aucThr$selected)) {
+    thr_results[[pw]]$aucThr$selected
+  } else {
+    1
+  }
+})
+
+interactions_df$thr_source <- interactions_df$thr_target  # same logic for both, if pathway name is same
+
+# Compute ratios
+interactions_df$ratio_target <- interactions_df$auc_target / interactions_df$thr_target
+interactions_df$ratio_source <- interactions_df$auc_source / interactions_df$thr_source
+
+# Composite score normalized by distance
+interactions_df$composite_score <- (interactions_df$ratio_target + interactions_df$ratio_source) / (2 * (interactions_df$distance + 1e-06))
+
+# Filter and sort
+ranked_interactions <- interactions_df %>%
+  filter(ratio_target > 1, ratio_source > 1) %>%
+  arrange(desc(composite_score))
+
+final_interactions <- ranked_interactions %>% select(-interaction_id)
+interaction_results <- interactions_df %>% select(-interaction_id)
+>>>>>>> cf4a86f3ba7785df1d1da6f1750427478a2c5ba1
   
   return(list(final_interactions = final_interactions,
               full_interactions = interaction_results,
