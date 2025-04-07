@@ -9,6 +9,9 @@ library(doSNOW)   # for parallel loops with progress bars
 library(BiocParallel)
 library(foreach)
 
+env <- foreach:::.foreachGlobals
+rm(list=ls(name=env), pos=env)
+
 ###############################
 # Step 1: Compute Gene Thresholds & Source/Target Pass Vectors
 ###############################
