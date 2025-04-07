@@ -328,7 +328,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   close(pb)
   
   # Checkpoint: Save cells_AUC so you can resume later if needed.
-  checkpoint_file <- "/home/projects2/kam_project/downstreamcci/outputs/cells_AUC_checkpoint.rds"
+  checkpoint_file <- "/home/projects2/kam_project/outputs/cells_AUC_checkpoint_r3.rds"
   saveRDS(cells_AUC, file = checkpoint_file)
   message("Checkpoint saved: ", checkpoint_file)
   
@@ -343,7 +343,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   # --- Compute composite scores for each interaction ---
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
 
-  checkpoint_file <- "/home/projects2/kam_project/downstreamcci/outputs/interactions_df_checkpoint.rds"
+  checkpoint_file <- "/home/projects2/kam_project/outputs/interactions_df_checkpoint_r3.rds"
   saveRDS(interactions_df, file = checkpoint_file)
   message("Checkpoint saved: ", checkpoint_file)
   

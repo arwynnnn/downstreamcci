@@ -49,16 +49,16 @@ dcc$computeSourceTargetPass(
   cell_type_col = "cell_type",
   cci_network_all = cci_network_all,
   high_exp_threshold = 0.25,
-  numCores = 32)
+  numCores = 64)
 
 # Step 2: Compute Spatial Neighbours and Annotate Interactions.
-dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), interaction_distance = 100, numCores = 32)
+dcc$computeNeighboursAndAnnotateInteractions(coordinate_cols = c("X", "Y"), interaction_distance = 100, numCores = 64)
 
 # Step 3: Calculate AUCell Scores, Filter Interactions
-dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.10, collection="C5", pathway_col="receptor", numCores = 32)
+dcc$calculateAndFilterInteractions(aucMaxRank_top_genes = 0.10, collection="C5", pathway_col="receptor", numCores = 64)
 
 # save the file
-saveRDS(dcc, file = "/home/projects2/kam_project/outputs/dcc_full_run2.rds")
+saveRDS(dcc, file = "/home/projects2/kam_project/outputs/dcc_full_run3.rds")
 
 # enrichment vs distance
 #printInteractionNumbers(dcc)
