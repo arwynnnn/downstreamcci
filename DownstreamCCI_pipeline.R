@@ -263,108 +263,88 @@ computeNeighboursAndAnnotateInteractions <- function(seurat_obj, coordinate_cols
 ###############################
 calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collection, assay, aucMaxRank_top_genes, numCores, pathway_col) {
   message("Step 3: Calculating enrichment and computing final scores...")
-
+  
   library(msigdbr)
   library(dplyr)
   library(stringr)
   library(AUCell)
-
-  # Use the user-specified column for pathway names
-  interactions_df <- interactions_df %>% mutate(pathway_value = .data[[pathway_col]])
-  unique_pathways <- unique(interactions_df$pathway_value)
-
+  
+  # --- Build Candidate and Gene-to-GO Mappings ---
+  # Retrieve GO:BP gene sets from msigdbr.
   msigdb_df <- msigdbr(species = "Homo sapiens", collection = collection, subcollection = "GO:BP")
-  message("  Building consolidated gene set mapping for each pathway using the ", collection, " category...")
-
-  # Build a consolidated mapping: for each pathway, take the union of all matching genes.
-  pathway_gene_mapping <- list()
-  pb <- txtProgressBar(min = 0, max = length(unique_pathways), style = 3)
-  for (i in seq_along(unique_pathways)) {
-    pw <- unique_pathways[i]
-    if (toupper(pw) %in% c("MHC-I", "MHC-II")) {
-      search_pw <- "HLA"
-    } else if (grepl("-", pw)) {
-      search_pw <- strsplit(pw, "-")[[1]][1]
-    } else {
-      search_pw <- pw
-    }
-    msig_subset <- msigdb_df %>% 
-      filter(str_detect(tolower(gene_symbol), fixed(tolower(search_pw))))
-    if (nrow(msig_subset) > 0) {
-      # Consolidate by taking the union of all genes found for this pathway
-      all_genes <- unique(msig_subset$gene_symbol)
-      pathway_gene_mapping[[pw]] <- all_genes
-    } else {
-      pathway_gene_mapping[[pw]] <- character(0)
-    }
-    setTxtProgressBar(pb, i)
-  }
-  close(pb)
-
-  # For each pathway, we now use a single candidate (the pathway name) that maps to the consolidated gene set.
-  candidate_mapping <- pathway_gene_mapping
-
+  
+  # Build candidate mapping: each GO term (gs_name) maps to its unique gene set.
+  candidate_mapping <- msigdb_df %>%
+    group_by(gs_name) %>%
+    summarize(genes = unique(gene_symbol)) %>%
+    ungroup() %>%
+    { setNames(.$genes, .$gs_name) }
+  
+  # Restrict candidate mapping to only those GO terms that include at least one gene from our interactions.
+  relevant_genes <- unique(c(interactions_df$ligand, interactions_df$receptor))
+  candidate_mapping <- candidate_mapping[sapply(candidate_mapping, function(genes) length(intersect(genes, relevant_genes)) > 0)]
+  
+  # Build gene-to-GO mapping: for each gene, list all associated GO terms.
+  gene_to_go <- msigdb_df %>% 
+    group_by(gene_symbol) %>% 
+    summarize(go_terms = list(unique(gs_name))) %>% 
+    ungroup() %>% 
+    { setNames(.$go_terms, .$gene_symbol) }
+  
   # --- Use ALL cells for AUCell ranking (global context) ---
   expr_dense_full <- as.matrix(seurat_obj[[assay]]@data)
   expr_dense <- expr_dense_full  # Using all cells ensures more robust rankings
   
   message("  Building AUCell rankings for assay '", assay, "'...")
-  cells_rankings <- suppressWarnings(suppressMessages(AUCell_buildRankings(expr_dense, plotStats = FALSE, verbose = TRUE)))
+  cells_rankings <- AUCell_buildRankings(expr_dense, plotStats = FALSE, verbose = TRUE)
   
   aucMaxRank_value <- ceiling(aucMaxRank_top_genes * nrow(expr_dense))
   message(paste0("  Calculating AUC scores using top ", aucMaxRank_top_genes * 100, "% genes..."))
   if(numCores == -1) { 
-    numCores <- parallel::detectCores() - 1}
-  cells_AUC <- suppressWarnings(suppressMessages(AUCell_calcAUC(candidate_mapping, cells_rankings, aucMaxRank = aucMaxRank_value, nCores = numCores, verbose = TRUE)))
+    numCores <- parallel::detectCores() - 1
+  }
+  cells_AUC <- AUCell_calcAUC(candidate_mapping, cells_rankings, aucMaxRank = aucMaxRank_value, nCores = numCores, verbose = TRUE)
   
   message("  Computing thresholds for enrichment scores...")
-  thr_results <- suppressWarnings(suppressMessages(AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)))
+  thr_results <- AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)
   auc_matrix <- getAUC(cells_AUC)
-
-  message("  Computing composite scores and final matrix..")
-  # --- Compute composite scores for each interaction ---
+  
+  message("  Computing composite scores and final matrix...")
   # Add interaction_id temporarily to join with AUC data
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
-
-  # Extract AUC values and thresholds for source and target cells
-  interactions_df$auc_target <- mapply(function(pathway, cell) {
-    if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-      auc_matrix[pathway, cell]
-    } else {
-      0
-    }
-  }, interactions_df[[pathway_col]], interactions_df$target_cell)
-
-  interactions_df$auc_source <- mapply(function(pathway, cell) {
-    if (pathway %in% rownames(auc_matrix) && cell %in% colnames(auc_matrix)) {
-      auc_matrix[pathway, cell]
-    } else {
-      0
-    }
-  }, interactions_df[[pathway_col]], interactions_df$source_cell)
-
-  interactions_df$thr_target <- sapply(interactions_df[[pathway_col]], function(pw) {
-    if (!is.null(thr_results[[pw]]) && !is.null(thr_results[[pw]]$aucThr$selected)) {
-      thr_results[[pw]]$aucThr$selected
-    } else {
-      1
-    }
-  })
-
-  interactions_df$thr_source <- interactions_df$thr_target  # same logic for both, if pathway name is same
-
-  # Compute ratios
-  interactions_df$ratio_target <- interactions_df$auc_target / interactions_df$thr_target
-  interactions_df$ratio_source <- interactions_df$auc_source / interactions_df$thr_source
-
-  #Composite score normalized by distance
-  interactions_df$composite_score <- (interactions_df$ratio_target + interactions_df$ratio_source) / (2 * (interactions_df$distance + 1e-06))
-
-  # Filter and sort
-  ranked_interactions <- interactions_df %>%
-    filter(ratio_target > 1, ratio_source > 1) %>%
+  
+  # Define a function to compute the median ratio (AUC/threshold) for a gene in a given cell.
+  compute_median_ratio <- function(gene, cell) {
+    go_terms <- gene_to_go[[gene]]
+    if (is.null(go_terms) || length(go_terms) == 0) return(0)
+    # Only consider GO terms that are present in the recomputed auc_matrix.
+    valid_go_terms <- go_terms[go_terms %in% rownames(auc_matrix)]
+    if (length(valid_go_terms) == 0) return(0)
+    ratios <- sapply(valid_go_terms, function(term) {
+      auc_val <- auc_matrix[term, cell]
+      thr_val <- if (!is.null(thr_results[[term]]) && !is.null(thr_results[[term]]$aucThr$selected)) {
+        thr_results[[term]]$aucThr$selected
+      } else {
+        1
+      }
+      auc_val / thr_val
+    })
+    median(ratios)
+  }
+  
+  # Compute median ratios for the ligand (source) and receptor (target) for each interaction.
+  interactions_df$median_ratio_source <- mapply(compute_median_ratio, interactions_df$ligand, interactions_df$source_cell)
+  interactions_df$median_ratio_target <- mapply(compute_median_ratio, interactions_df$receptor, interactions_df$target_cell)
+  
+  # Composite score normalized by distance.
+  interactions_df$composite_score <- (interactions_df$median_ratio_source + interactions_df$median_ratio_target) /
+    (2 * (interactions_df$distance + 1e-06))
+  
+  # Filter and sort: keep interactions where both median ratios exceed 1.
+  ranked_interactions <- interactions_df %>% 
+    filter(median_ratio_source > 1, median_ratio_target > 1) %>% 
     arrange(desc(composite_score))
-
+  
   final_interactions <- ranked_interactions %>% select(-interaction_id)
   interaction_results <- interactions_df %>% select(-interaction_id)
   
