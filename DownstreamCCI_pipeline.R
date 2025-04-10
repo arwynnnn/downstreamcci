@@ -325,6 +325,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   
   # Precompute valid GO terms for each gene:
   # Only GO terms in auc_matrix are retained.
+  message("   Precomputing valid GO terms for each gene...")
   valid_gene_go_terms <- lapply(gene_to_go, function(go_terms) {
     if (is.null(go_terms) || length(go_terms) == 0) 
       return(character(0))
@@ -332,6 +333,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   })
   
   # Precompute thresholds for each GO term in the auc_matrix.
+  message("   Precomputing thresholds for each GO term...")
   go_term_thresholds <- sapply(rownames(auc_matrix), function(term) {
     if (!is.null(thr_results[[term]]) && !is.null(thr_results[[term]]$aucThr$selected)) {
       thr_results[[term]]$aucThr$selected
@@ -378,6 +380,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   }
   
   # Compute results for the ligand (source) for each interaction in parallel.
+  message("   Computing results for the ligand (source) for each interaction...")
   source_results <- future_map2(
     interactions_df$ligand,
     interactions_df$source_cell,
@@ -385,10 +388,12 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   )
   
   # Extract the median ratio and details for source.
+  message("   Extracting the median ratio and details for source...")
   interactions_df$median_ratio_source <- map_dbl(source_results, "median")
   interactions_df$gene_set_results_source <- map(source_results, "details")
   
   # Compute results for the receptor (target) for each interaction in parallel.
+   message("   Computing results for the receptor (targer) for each interaction...")
   target_results <- future_map2(
     interactions_df$receptor,
     interactions_df$target_cell,
@@ -396,23 +401,28 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   )
   
   # Extract the median ratio and details for target.
+  message("   Extracting the median ratio and details for target...")
   interactions_df$median_ratio_target <- map_dbl(target_results, "median")
   interactions_df$gene_set_results_target <- map(target_results, "details")
   
   # Compute the composite score normalized by distance.
+  message("   Computing the composite score normalized by distance...")
   interactions_df$composite_score <- (interactions_df$median_ratio_source +
     interactions_df$median_ratio_target) / (2 * (interactions_df$distance + 1e-06))
   
   # Filter interactions to keep only those with both median ratios exceeding 1 and sort by composite score.
+  message("   Filtering interactions...")
   ranked_interactions <- interactions_df %>% 
     filter(median_ratio_source > 1, median_ratio_target > 1) %>% 
     arrange(desc(composite_score))
   
   # Remove the temporary interaction_id column before returning.
+  message("   Cleaning the image...")
   final_interactions <- ranked_interactions %>% select(-interaction_id)
   interaction_results <- interactions_df %>% select(-interaction_id)
   
   # Return the final objects.
+  message("Pipeline completed.")
   list(
     final_interactions = final_interactions,
     full_interactions = interaction_results,
