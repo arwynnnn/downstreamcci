@@ -318,7 +318,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   # Add interaction_id temporarily to join with AUC dat
   
   # For Linux, use multicore.
-  plan(multicore)
+  plan(multicore, workers =numCores)
   
   # Add an interaction ID.
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
