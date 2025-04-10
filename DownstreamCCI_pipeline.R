@@ -8,6 +8,13 @@
 library(doSNOW)   # for parallel loops with progress bars
 library(BiocParallel)
 library(foreach)
+library(msigdbr)
+library(dplyr)
+library(stringr)
+library(AUCell)
+library(future)
+library(furrr)
+library(purrr)
 
 env <- foreach:::.foreachGlobals
 rm(list=ls(name=env), pos=env)
@@ -267,11 +274,6 @@ computeNeighboursAndAnnotateInteractions <- function(seurat_obj, coordinate_cols
 calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collection, assay, aucMaxRank_top_genes, numCores, pathway_col) {
   message("Step 3: Calculating enrichment and computing final scores...")
   
-  library(msigdbr)
-  library(dplyr)
-  library(stringr)
-  library(AUCell)
-  
   # --- Build Candidate and Gene-to-GO Mappings ---
   # Retrieve GO:BP gene sets from msigdbr.
   msigdb_df <- msigdbr(species = "Homo sapiens", collection = collection, subcollection = "GO:BP")
@@ -313,45 +315,107 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   auc_matrix <- getAUC(cells_AUC)
   
   message("  Computing composite scores and final matrix...")
-  # Add interaction_id temporarily to join with AUC data
+  # Add interaction_id temporarily to join with AUC dat
+  
+  # For Linux, use multicore.
+  plan(multicore)
+  
+  # Add an interaction ID.
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
   
-  # Define a function to compute the median ratio (AUC/threshold) for a gene in a given cell.
-  compute_median_ratio <- function(gene, cell) {
-    go_terms <- gene_to_go[[gene]]
-    if (is.null(go_terms) || length(go_terms) == 0) return(0)
-    # Only consider GO terms that are present in the recomputed auc_matrix.
-    valid_go_terms <- go_terms[go_terms %in% rownames(auc_matrix)]
-    if (length(valid_go_terms) == 0) return(0)
-    ratios <- sapply(valid_go_terms, function(term) {
-      auc_val <- auc_matrix[term, cell]
-      thr_val <- if (!is.null(thr_results[[term]]) && !is.null(thr_results[[term]]$aucThr$selected)) {
-        thr_results[[term]]$aucThr$selected
-      } else {
-        1
-      }
-      auc_val / thr_val
-    })
-    median(ratios)
+  # Precompute valid GO terms for each gene:
+  # Only GO terms in auc_matrix are retained.
+  valid_gene_go_terms <- lapply(gene_to_go, function(go_terms) {
+    if (is.null(go_terms) || length(go_terms) == 0) 
+      return(character(0))
+    intersect(go_terms, rownames(auc_matrix))
+  })
+  
+  # Precompute thresholds for each GO term in the auc_matrix.
+  go_term_thresholds <- sapply(rownames(auc_matrix), function(term) {
+    if (!is.null(thr_results[[term]]) && !is.null(thr_results[[term]]$aucThr$selected)) {
+      thr_results[[term]]$aucThr$selected
+    } else {
+      1
+    }
+  }, USE.NAMES = TRUE)
+  
+  # Define a function that computes both the median ratio and details for a given gene in a given cell.
+  compute_median_ratio_and_details <- function(gene, cell) {
+    valid_terms <- valid_gene_go_terms[[gene]]
+    
+    # If there are no valid GO terms, return 0 median and an empty details data frame.
+    if (length(valid_terms) == 0) {
+      details_df <- data.frame(
+        term = character(0),
+        auc_val = numeric(0),
+        threshold = numeric(0),
+        ratio = numeric(0),
+        stringsAsFactors = FALSE
+      )
+      return(list(median = 0, details = details_df))
+    }
+    
+    # Get AUC values for the specified cell and thresholds for these terms.
+    auc_vals <- auc_matrix[valid_terms, cell]
+    thr_vals <- go_term_thresholds[valid_terms]
+    
+    # Compute the ratios.
+    ratios <- auc_vals / thr_vals
+    
+    # Calculate the median.
+    med_val <- median(ratios)
+    
+    # Build a details data frame containing per term results.
+    details_df <- data.frame(
+      term = valid_terms,
+      auc_val = auc_vals,
+      threshold = thr_vals,
+      ratio = ratios,
+      stringsAsFactors = FALSE
+    )
+    return(list(median = med_val, details = details_df))
   }
   
-  # Compute median ratios for the ligand (source) and receptor (target) for each interaction.
-  interactions_df$median_ratio_source <- mapply(compute_median_ratio, interactions_df$ligand, interactions_df$source_cell)
-  interactions_df$median_ratio_target <- mapply(compute_median_ratio, interactions_df$receptor, interactions_df$target_cell)
+  # Compute results for the ligand (source) for each interaction in parallel.
+  source_results <- future_map2(
+    interactions_df$ligand,
+    interactions_df$source_cell,
+    compute_median_ratio_and_details
+  )
   
-  # Composite score normalized by distance.
-  interactions_df$composite_score <- (interactions_df$median_ratio_source + interactions_df$median_ratio_target) /
-    (2 * (interactions_df$distance + 1e-06))
+  # Extract the median ratio and details for source.
+  interactions_df$median_ratio_source <- map_dbl(source_results, "median")
+  interactions_df$gene_set_results_source <- map(source_results, "details")
   
-  # Filter and sort: keep interactions where both median ratios exceed 1.
+  # Compute results for the receptor (target) for each interaction in parallel.
+  target_results <- future_map2(
+    interactions_df$receptor,
+    interactions_df$target_cell,
+    compute_median_ratio_and_details
+  )
+  
+  # Extract the median ratio and details for target.
+  interactions_df$median_ratio_target <- map_dbl(target_results, "median")
+  interactions_df$gene_set_results_target <- map(target_results, "details")
+  
+  # Compute the composite score normalized by distance.
+  interactions_df$composite_score <- (interactions_df$median_ratio_source +
+    interactions_df$median_ratio_target) / (2 * (interactions_df$distance + 1e-06))
+  
+  # Filter interactions to keep only those with both median ratios exceeding 1 and sort by composite score.
   ranked_interactions <- interactions_df %>% 
     filter(median_ratio_source > 1, median_ratio_target > 1) %>% 
     arrange(desc(composite_score))
   
+  # Remove the temporary interaction_id column before returning.
   final_interactions <- ranked_interactions %>% select(-interaction_id)
   interaction_results <- interactions_df %>% select(-interaction_id)
   
-  return(list(final_interactions = final_interactions,
-              full_interactions = interaction_results,
-              auc_matrix = auc_matrix))
+  # Return the final objects.
+  list(
+    final_interactions = final_interactions,
+    full_interactions = interaction_results,
+    auc_matrix = auc_matrix
+  )
 }
