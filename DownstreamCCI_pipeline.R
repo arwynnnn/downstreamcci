@@ -311,14 +311,14 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   cells_AUC <- AUCell_calcAUC(candidate_mapping, cells_rankings, aucMaxRank = aucMaxRank_value, nCores = numCores, verbose = TRUE)
   
   message("  Computing thresholds for enrichment scores...")
-  thr_results <- AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores, verbose = TRUE)
+  thr_results <- AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores-2, verbose = TRUE)
   auc_matrix <- getAUC(cells_AUC)
   
   message("  Computing composite scores and final matrix...")
   # Add interaction_id temporarily to join with AUC dat
   
   # For Linux, use multicore.
-  plan(multicore, workers =numCores)
+  plan(multisession, workers =8)
   
   # Add an interaction ID.
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
