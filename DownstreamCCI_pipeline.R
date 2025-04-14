@@ -370,12 +370,13 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
     
     # Build a details data frame containing per term results.
     details_df <- data.frame(
-      term = valid_terms,
-      auc_val = auc_vals,
-      threshold = thr_vals,
-      ratio = ratios,
-      stringsAsFactors = FALSE
-    )
+    term = valid_terms,
+    auc_val = auc_vals,
+    threshold = thr_vals,
+    ratio = ratios,
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
     return(list(median = med_val, details = details_df))
   }
   
