@@ -314,16 +314,6 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   thr_results <- AUCell_exploreThresholds(cells_AUC, plotHist = FALSE, assign = TRUE, nCores = numCores-2, verbose = TRUE)
   auc_matrix <- getAUC(cells_AUC)
 
-  # CHECKPOINT
-  prefix <- "/home/projects2/kam_project/outputs/checkpoints_r5/ckp_"
-  saveRDS(thr_results, paste0(prefix, "AUCell_thresholds.rds"))
-  saveRDS(cells_AUC, paste0(prefix, "AUCell_raw_AUC.rds"))
-  saveRDS(auc_matrix, paste0(prefix, "AUC_matrix.rds"))
-  saveRDS(interactions_df, paste0(prefix, "interactions_df_with_ids.rds"))
-  saveRDS(gene_to_go, paste0(prefix, "gene_to_go.rds"))
-  saveRDS(valid_gene_go_terms, paste0(prefix, "valid_gene_go_terms.rds"))
-  saveRDS(go_term_thresholds, paste0(prefix, "go_term_thresholds.rds"))
-
   
   message("  Computing composite scores and final matrix...")
   # Add interaction_id temporarily to join with AUC dat
@@ -352,6 +342,16 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
       1
     }
   }, USE.NAMES = TRUE)
+
+  # CHECKPOINT
+  prefix <- "/home/projects2/kam_project/outputs/checkpoints_r5/ckp_"
+  saveRDS(thr_results, paste0(prefix, "AUCell_thresholds.rds"))
+  saveRDS(cells_AUC, paste0(prefix, "AUCell_raw_AUC.rds"))
+  saveRDS(auc_matrix, paste0(prefix, "AUC_matrix.rds"))
+  saveRDS(interactions_df, paste0(prefix, "interactions_df_with_ids.rds"))
+  saveRDS(gene_to_go, paste0(prefix, "gene_to_go.rds"))
+  saveRDS(valid_gene_go_terms, paste0(prefix, "valid_gene_go_terms.rds"))
+  saveRDS(go_term_thresholds, paste0(prefix, "go_term_thresholds.rds"))
   
   # Define a function that computes both the median ratio and details for a given gene in a given cell.
   compute_median_ratio_and_details <- function(gene, cell) {
