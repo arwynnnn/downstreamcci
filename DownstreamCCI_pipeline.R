@@ -319,7 +319,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   # Add interaction_id temporarily to join with AUC dat
   
   # For Linux, use multicore.
-  plan(multicore, workers =numCores)
+  plan(multisession, workers=numCores-2)
   
   # Add an interaction ID.
   interactions_df <- interactions_df %>% mutate(interaction_id = row_number())
@@ -352,12 +352,15 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   saveRDS(gene_to_go, paste0(prefix, "gene_to_go.rds"))
   saveRDS(valid_gene_go_terms, paste0(prefix, "valid_gene_go_terms.rds"))
   saveRDS(go_term_thresholds, paste0(prefix, "go_term_thresholds.rds"))
+
+  future_params <- list(
+  valid_gene_go_terms = valid_gene_go_terms,
+  go_term_thresholds = go_term_thresholds,
+  auc_matrix = auc_matrix)
   
   # Define a function that computes both the median ratio and details for a given gene in a given cell.
-  compute_median_ratio_and_details <- function(gene, cell) {
-    valid_terms <- valid_gene_go_terms[[gene]]
-    
-    # If there are no valid GO terms, return 0 median and an empty details data frame.
+  compute_median_ratio_and_details <- function(gene, cell, params) {
+    valid_terms <- params$valid_gene_go_terms[[gene]]
     if (length(valid_terms) == 0) {
       details_df <- data.frame(
         term = character(0),
@@ -368,35 +371,28 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
       )
       return(list(median = 0, details = details_df))
     }
-    
-    # Get AUC values for the specified cell and thresholds for these terms.
-    auc_vals <- auc_matrix[valid_terms, cell]
-    thr_vals <- go_term_thresholds[valid_terms]
-    
-    # Compute the ratios.
+    auc_vals <- params$auc_matrix[valid_terms, cell, drop = TRUE]
+    thr_vals <- params$go_term_thresholds[valid_terms]
     ratios <- auc_vals / thr_vals
-    
-    # Calculate the median.
     med_val <- median(ratios)
-    
-    # Build a details data frame containing per term results.
     details_df <- data.frame(
-    term = valid_terms,
-    auc_val = auc_vals,
-    threshold = thr_vals,
-    ratio = ratios,
-    stringsAsFactors = FALSE,
-    row.names = NULL
-  )
+      term = valid_terms,
+      auc_val = auc_vals,
+      threshold = thr_vals,
+      ratio = ratios,
+      stringsAsFactors = FALSE
+    )
     return(list(median = med_val, details = details_df))
   }
   
   # Compute results for the ligand (source) for each interaction in parallel.
   message("   Computing results for the ligand (source) for each interaction...")
   source_results <- future_map2(
-    interactions_df$ligand,
-    interactions_df$source_cell,
-    compute_median_ratio_and_details
+  interactions_df$ligand,
+  interactions_df$source_cell,
+  function(gene, cell) {
+    compute_median_ratio_and_details(gene, cell, future_params)
+    }
   )
   
   # Extract the median ratio and details for source.
@@ -405,11 +401,13 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   interactions_df$gene_set_results_source <- map(source_results, "details")
   
   # Compute results for the receptor (target) for each interaction in parallel.
-   message("   Computing results for the receptor (targer) for each interaction...")
+  message("   Computing results for the receptor (targer) for each interaction...")
   target_results <- future_map2(
     interactions_df$receptor,
     interactions_df$target_cell,
-    compute_median_ratio_and_details
+    function(gene, cell) {
+      compute_median_ratio_and_details(gene, cell, future_params)
+    }
   )
   
   # Extract the median ratio and details for target.
