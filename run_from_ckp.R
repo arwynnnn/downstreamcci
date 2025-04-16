@@ -67,7 +67,7 @@ future_params <- list(
 # -------------------------------
 # Set up parallel processing with furrr
 # -------------------------------
-numCores <- 64  # Adjust number of cores as needed
+numCores <- 16  # Adjust number of cores as needed
 plan(multisession, workers = numCores)
 
 # -------------------------------
