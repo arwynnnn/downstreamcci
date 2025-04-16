@@ -49,7 +49,8 @@ compute_median_ratio_and_details <- function(gene, cell, params) {
     auc_val = auc_vals,
     threshold = thr_vals,
     ratio = ratios,
-    stringsAsFactors = FALSE
+    stringsAsFactors = FALSE,
+    row.names = NULL
   )
   return(list(median = med_val, details = details_df))
 }
