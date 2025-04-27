@@ -15,14 +15,16 @@ library(purrr)
 # Define the checkpoint file prefix
 prefix <- "/home/projects2/kam_project/outputs/checkpoints_r5/ckp_"
 
+message("Loading files...")
 # Load checkpoint objects
-thr_results         <- readRDS(paste0(prefix, "AUCell_thresholds.rds"))
-cells_AUC           <- readRDS(paste0(prefix, "AUCell_raw_AUC.rds"))
+#thr_results         <- readRDS(paste0(prefix, "AUCell_thresholds.rds"))
+#cells_AUC           <- readRDS(paste0(prefix, "AUCell_raw_AUC.rds"))
 auc_matrix          <- readRDS(paste0(prefix, "AUC_matrix.rds"))
 interactions_df     <- readRDS(paste0(prefix, "interactions_df_with_ids.rds"))
-gene_to_go          <- readRDS(paste0(prefix, "gene_to_go.rds"))
+#gene_to_go          <- readRDS(paste0(prefix, "gene_to_go.rds"))
 valid_gene_go_terms <- readRDS(paste0(prefix, "valid_gene_go_terms.rds"))
 go_term_thresholds  <- readRDS(paste0(prefix, "go_term_thresholds.rds"))
+names(go_term_thresholds) <- gsub("\\..*$", "", names(go_term_thresholds))
 
 # -------------------------------
 # Modified Helper Function 
