@@ -344,7 +344,7 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   }, USE.NAMES = TRUE)
 
   # CHECKPOINT
-  prefix <- "/home/projects2/kam_project/outputs/checkpoints_r5/ckp_"
+  prefix <- "/home/projects2/kam_project/outputs2/ckp_"
   saveRDS(thr_results, paste0(prefix, "AUCell_thresholds.rds"))
   saveRDS(cells_AUC, paste0(prefix, "AUCell_raw_AUC.rds"))
   saveRDS(auc_matrix, paste0(prefix, "AUC_matrix.rds"))
@@ -353,89 +353,92 @@ calculateAndFilterInteractions <- function(seurat_obj, interactions_df, collecti
   saveRDS(valid_gene_go_terms, paste0(prefix, "valid_gene_go_terms.rds"))
   saveRDS(go_term_thresholds, paste0(prefix, "go_term_thresholds.rds"))
 
-  future_params <- list(
-  valid_gene_go_terms = valid_gene_go_terms,
-  go_term_thresholds = go_term_thresholds,
-  auc_matrix = auc_matrix)
+  return()
+}
+                                                
+  #future_params <- list(
+  #valid_gene_go_terms = valid_gene_go_terms,
+  #go_term_thresholds = go_term_thresholds,
+  #auc_matrix = auc_matrix)
   
   # Define a function that computes both the median ratio and details for a given gene in a given cell.
-  compute_median_ratio_and_details <- function(gene, cell, params) {
-    valid_terms <- params$valid_gene_go_terms[[gene]]
-    if (length(valid_terms) == 0) {
-      details_df <- data.frame(
-        term = character(0),
-        auc_val = numeric(0),
-        threshold = numeric(0),
-        ratio = numeric(0),
-        stringsAsFactors = FALSE
-      )
-      return(list(median = 0, details = details_df))
-    }
-    auc_vals <- params$auc_matrix[valid_terms, cell, drop = TRUE]
-    thr_vals <- params$go_term_thresholds[valid_terms]
-    ratios <- auc_vals / thr_vals
-    med_val <- median(ratios)
-    details_df <- data.frame(
-      term = valid_terms,
-      auc_val = auc_vals,
-      threshold = thr_vals,
-      ratio = ratios,
-      stringsAsFactors = FALSE
-    )
-    return(list(median = med_val, details = details_df))
-  }
-  
+  #compute_median_ratio_and_details <- function(gene, cell, params) {
+  #  valid_terms <- params$valid_gene_go_terms[[gene]]
+  #  if (length(valid_terms) == 0) {
+  #    details_df <- data.frame(
+  #      term = character(0),
+  #      auc_val = numeric(0),
+  #      threshold = numeric(0),
+  #      ratio = numeric(0),
+  #      stringsAsFactors = FALSE
+  #    )
+  #    return(list(median = 0, details = details_df))
+  #  }
+  #  auc_vals <- params$auc_matrix[valid_terms, cell, drop = TRUE]
+  #  thr_vals <- params$go_term_thresholds[valid_terms]
+  #  ratios <- auc_vals / thr_vals
+  #  med_val <- median(ratios)
+  #  details_df <- data.frame(
+  #    term = valid_terms,
+  #    auc_val = auc_vals,
+  #    threshold = thr_vals,
+  #    ratio = ratios,
+  #    stringsAsFactors = FALSE
+  #  )
+  #  return(list(median = med_val, details = details_df))
+  #}
+  #
   # Compute results for the ligand (source) for each interaction in parallel.
-  message("   Computing results for the ligand (source) for each interaction...")
-  source_results <- future_map2(
-  interactions_df$ligand,
-  interactions_df$source_cell,
-  function(gene, cell) {
-    compute_median_ratio_and_details(gene, cell, future_params)
-    }
-  )
-  
-  # Extract the median ratio and details for source.
-  message("   Extracting the median ratio and details for source...")
-  interactions_df$median_ratio_source <- map_dbl(source_results, "median")
-  interactions_df$gene_set_results_source <- map(source_results, "details")
-  
-  # Compute results for the receptor (target) for each interaction in parallel.
-  message("   Computing results for the receptor (targer) for each interaction...")
-  target_results <- future_map2(
-    interactions_df$receptor,
-    interactions_df$target_cell,
-    function(gene, cell) {
-      compute_median_ratio_and_details(gene, cell, future_params)
-    }
-  )
-  
+  #message("   Computing results for the ligand (source) for each interaction...")
+  #source_results <- future_map2(
+  #interactions_df$ligand,
+  #interactions_df$source_cell,
+  #function(gene, cell) {
+  #  compute_median_ratio_and_details(gene, cell, future_params)
+  #  }
+  #)
+ # 
+ # # Extract the median ratio and details for source.
+ # message("   Extracting the median ratio and details for source...")
+ # interactions_df$median_ratio_source <- map_dbl(source_results, "median")
+ # interactions_df$gene_set_results_source <- map(source_results, "details")
+ # 
+ # # Compute results for the receptor (target) for each interaction in parallel.
+ # message("   Computing results for the receptor (targer) for each interaction...")
+ # target_results <- future_map2(
+ #   interactions_df$receptor,
+ #   interactions_df$target_cell,
+ #   function(gene, cell) {
+ #     compute_median_ratio_and_details(gene, cell, future_params)
+ #   }
+ # )
+ # 
   # Extract the median ratio and details for target.
-  message("   Extracting the median ratio and details for target...")
-  interactions_df$median_ratio_target <- map_dbl(target_results, "median")
-  interactions_df$gene_set_results_target <- map(target_results, "details")
-  
-  # Compute the composite score normalized by distance.
-  message("   Computing the composite score normalized by distance...")
-  interactions_df$composite_score <- (interactions_df$median_ratio_source +
-    interactions_df$median_ratio_target) / (2 * (interactions_df$distance + 1e-06))
-  
-  # Filter interactions to keep only those with both median ratios exceeding 1 and sort by composite score.
-  message("   Filtering interactions...")
-  ranked_interactions <- interactions_df %>% 
-    filter(median_ratio_source > 1, median_ratio_target > 1) %>% 
-    arrange(desc(composite_score))
-  
-  # Remove the temporary interaction_id column before returning.
-  message("   Cleaning the image...")
-  final_interactions <- ranked_interactions %>% select(-interaction_id)
-  interaction_results <- interactions_df %>% select(-interaction_id)
-  
-  # Return the final objects.
-  message("Pipeline completed.")
-  list(
-    final_interactions = final_interactions,
-    full_interactions = interaction_results,
-    auc_matrix = auc_matrix
-  )
-}
+#  message("   Extracting the median ratio and details for target...")
+#  interactions_df$median_ratio_target <- map_dbl(target_results, "median")
+#  interactions_df$gene_set_results_target <- map(target_results, "details")
+#  
+#  # Compute the composite score normalized by distance.
+#  message("   Computing the composite score normalized by distance...")
+#  interactions_df$composite_score <- (interactions_df$median_ratio_source +
+#    interactions_df$median_ratio_target) / (2 * (interactions_df$distance + 1e-06))
+#  
+#  # Filter interactions to keep only those with both median ratios exceeding 1 and sort by composite score.
+#  message("   Filtering interactions...")
+#  ranked_interactions <- interactions_df %>% 
+#    filter(median_ratio_source > 1, median_ratio_target > 1) %>% 
+#    arrange(desc(composite_score))
+#  
+#  # Remove the temporary interaction_id column before returning.
+#  message("   Cleaning the image...")
+#  final_interactions <- ranked_interactions %>% select(-interaction_id)
+#  interaction_results <- interactions_df %>% select(-interaction_id)
+#  
+#  # Return the final objects.
+#  message("Pipeline completed.")
+#  list(
+#    final_interactions = final_interactions,
+#    full_interactions = interaction_results,
+#    auc_matrix = auc_matrix
+#  )
+#}
