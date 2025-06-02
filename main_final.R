@@ -1,7 +1,7 @@
 
-source("KNN_imputation.R")
-source("DownstreamCCI.R")
-source("DownstreamCCI_utils.R")
+source("/home/projects2/kam_project/downstreamcci/KNN_imputation.R")
+source("/home/projects2/kam_project/downstreamcci/DownstreamCCI.R")
+source("/home/projects2/kam_project/downstreamcci/DownstreamCCI_utils.R")
 library(Seurat)
 library(SeuratObject)
 
