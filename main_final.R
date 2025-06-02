@@ -9,7 +9,6 @@ library(SeuratObject)
 
 # expression
 HumanTonsil_spatial <- read.csv("/home/projects2/kam_project/data/HumanTonsil_spatial.csv")
-HumanTonsil_spatial <- read.csv("C:/Users/Kacper/Documents/#DTU/KU/nichenet/data/HumanTonsil_spatial.csv")
 HumanTonsil_expression = as.data.frame(fread("/home/projects2/kam_project/data/HumanTonsil_expression.csv.gz"))
 rownames(HumanTonsil_expression) <- HumanTonsil_expression$V1
 HumanTonsil_expression <- HumanTonsil_expression[, -1]
