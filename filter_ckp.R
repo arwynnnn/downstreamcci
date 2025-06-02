@@ -2,7 +2,7 @@ library(dplyr)
 library(purrr)
 
 # Load the full interaction details
-full_interactions <- readRDS("/home/projects2/kam_project/outputs/full_interactions.rds")
+full_interactions <- readRDS("/home/projects2/kam_project/outputs2/full_interactions.rds")
 
 # Set your custom threshold
 required_fraction <- 0.2  # 20%
@@ -30,4 +30,4 @@ final_interactions_custom <- full_interactions %>%
   arrange(desc(composite_score))  # Sort if you want
 
 # Save the newly filtered interactions
-saveRDS(final_interactions_custom, file = "/home/projects2/kam_project/outputs/final_interactions_20q.rds")
+saveRDS(final_interactions_custom, file = "/home/projects2/kam_project/outputs2/final_interactions_20q.rds")
